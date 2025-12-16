@@ -35,24 +35,14 @@ Estructura rápida
 - `main/init.*`        utilidades de arranque.
 - `CMakeLists.txt`     proyecto ESP-IDF.
 
-Construcción y carga
---------------------
-```bash
-# Configurar IDF_PATH y toolchain como de costumbre
-idf.py set-target esp32
-idf.py menuconfig      # opcional: ajustar red, pines, baudrate
-idf.py build
-idf.py -p COMx flash monitor
-```
-Sustituye `COMx` por el puerto serie de tu placa.
 
 Uso rápido
 ----------
-1) Alimenta la placa y espera a que los ESC armen (3 s).  
-2) Conéctate al WiFi SoftAP `robot-snowx` (`robot123`).  
+1) Alimentar la placa y espera a que los ESC armen (3 s).  
+2) Conectarse al WiFi SoftAP `robot-snowx` (`robot123`).  
 3) Abre `http://192.168.4.1/` y envía comandos: velocidad (m/s), dirección (deg) y tiempo (ms).  
-4) También puedes abrir un socket TCP al puerto 9000 y enviar `V=0.25;D=90;T=3000`.  
-5) Los logs de control y estimación se muestran en el monitor serie.
+4) Es posible abrir un socket TCP al puerto 9000 y enviar `V=0.25;D=90;T=3000`.  
+5) Los logs de control y estimación se muestran en el monitor serial.
 
 Parámetros clave (editable en `main.c`)
 ---------------------------------------
@@ -77,6 +67,3 @@ Notas y tips
 - La calibración AS5600 completa (`as5600_calibrate_full_range`) se ejecuta al arranque; revisa imán y alineación si falla.
 - Ajusta `MOTOR_PWM_BOTTOM_DUTY` y `MOTOR_PWM_TOP_DUTY` a las especificaciones de tus ESC para evitar arm/desarme errático.
 
-Licencia
---------
-Proyecto derivado del ejemplo de ESP-IDF; adapta a tus necesidades de laboratorio/competencia.
