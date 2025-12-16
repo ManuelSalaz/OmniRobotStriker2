@@ -21,6 +21,14 @@
 #include "esp_netif.h"
 #include "nvs_flash.h"
 
+/**
+ * @file main.c
+ * @brief Control omnidireccional de 3 ruedas con ESP-IDF.
+ *
+ * Inicializa sensores (AS5600 I2C/analógicos, BNO055), motor PWM,
+ * servidores HTTP/TCP para comandos y tareas FreeRTOS de fusión de
+ * sensores y control PI por rueda con sujeción de rumbo.
+ */
 
 typedef struct {
     float angle_deg;
@@ -170,6 +178,16 @@ static inline float rpm_to_rad_s(float rpm)
     return rpm * (2.0f * M_PI / 60.0f);
 }
 
+/**
+ * @brief Convierte RPM de cada rueda a velocidades del chasis.
+ *
+ * @param rpm1 RPM rueda 1.
+ * @param rpm2 RPM rueda 2.
+ * @param rpm3 RPM rueda 3.
+ * @param vx   Salida: velocidad lineal eje X (m/s).
+ * @param vy   Salida: velocidad lineal eje Y (m/s).
+ * @param wz   Salida: velocidad angular (rad/s).
+ */
 static void omni_forward_kinematics(float rpm1, float rpm2, float rpm3,
                                     float *vx, float *vy, float *wz)
 {
@@ -250,6 +268,13 @@ static float fuse_yaw(float yaw_prev, float wz_gyro, float yaw_meas, float dt)
     return wrap_pi(yaw_pred + (1.0f - beta) * err);
 }
 
+/**
+ * @brief Control proporcional simple sobre el error de yaw.
+ *
+ * @param yaw_target Objetivo de orientación (rad).
+ * @param yaw_meas   Medición actual (rad).
+ * @return Referencia de velocidad angular (rad/s).
+ */
 static float yaw_controller(float yaw_target, float yaw_meas)
 {
     const float Kp_yaw = 2.5f;   // AJUSTABLE (rad/s por rad)
@@ -257,7 +282,14 @@ static float yaw_controller(float yaw_target, float yaw_meas)
     return Kp_yaw * err;
 }
 
-
+/**
+ * @brief Tarea de fusión: combina encoders y IMU para estimar estado.
+ *
+ * Ejecuta a ~100 Hz, calcula cinemática directa, fusiona con gyro/yaw,
+ * y publica velocidades y yaw filtrados en `est`.
+ *
+ * @param arg Puntero a `BNO055_t`.
+ */
 static void sensor_fusion_task(void *arg)
 {
     BNO055_t *imu = (BNO055_t *)arg;
@@ -366,6 +398,15 @@ static float kalman_update(kalman_1d_t *k, float z)
     return k->x;
 }
 
+/**
+ * @brief PI con anti-windup para una rueda.
+ *
+ * @param pi   Controlador.
+ * @param ref  Referencia de RPM.
+ * @param meas Medición de RPM.
+ * @param dt   Periodo de muestreo (s).
+ * @return Duty en porcentaje a aplicar.
+ */
 static float pi_update(pi_ctrl_t *pi, float ref, float meas, float dt)
 {
     float error = ref - meas;
@@ -591,6 +632,12 @@ static void tcp_cmd_server_task(void *arg)
 }
 
 
+/**
+ * @brief Lazo de control principal de motores (~100 Hz).
+ *
+ * Lee el comando activo, aplica heading hold, resuelve la cinemática inversa,
+ * ejecuta control PI por rueda y actualiza el duty PWM de los tres motores.
+ */
 static void motor_control_task(void *arg)
 {
     int64_t t_prev = esp_timer_get_time();
@@ -738,6 +785,11 @@ static void motor_control_task(void *arg)
     }
 }
 
+/**
+ * @brief Patrón de prueba simple para accionar simultáneamente los motores.
+ *
+ * Permite verificar que los tres ESC responden al duty configurado.
+ */
 static void motor_demo_step(void)
 {
     static const motor_pattern_cmd_t pattern[] = {
@@ -760,6 +812,12 @@ static void motor_demo_step(void)
     idx = (idx + 1) % (sizeof(pattern) / sizeof(pattern[0]));
 }
 
+/**
+ * @brief Lee el encoder AS5600 por I2C (rueda 1) y filtra RPM.
+ *
+ * Usa un filtro de Kalman 1D para suavizar la medición antes de
+ * publicar en `encoder_data`.
+ */
 static void encoder_task(void *arg)
 {
     AS5600_t *enc = (AS5600_t *)arg;
@@ -808,6 +866,13 @@ static void encoder_task(void *arg)
     }
 }
 
+/**
+ * @brief Lee encoders AS5600 en modo analógico (ruedas 2 y 3).
+ *
+ * Calcula RPM a partir de la derivada del ángulo, invierte signo en la
+ * rueda 3, aplica clamp, suavizado y filtro de Kalman antes de publicar
+ * en `ana_rpm`.
+ */
 static void analog_encoders_task(void *arg)
 
 
@@ -879,6 +944,13 @@ static void analog_encoders_task(void *arg)
     }
 }
 
+/**
+ * @brief Carga un comando de movimiento y fija el yaw objetivo.
+ *
+ * @param speed   Velocidad lineal (m/s).
+ * @param dir_deg Dirección absoluta (grados, 0 = eje X).
+ * @param time_ms Duración del comando (ms).
+ */
 static void apply_motion_command(float speed, float dir_deg, uint32_t time_ms)
 {
     float dir_rad = dir_deg * M_PI / 180.0f;
